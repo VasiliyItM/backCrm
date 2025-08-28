@@ -9,7 +9,10 @@ RUN uv pip install --system --no-cache-dir -r pyproject.toml
 
 COPY . .
 
-# Указываем порт, который будет использоваться
+# Создаем директорию для логов
+RUN mkdir -p /app/logs
+
+# Указываем порт
 EXPOSE 8000
 
 # Команда для запуска Litestar
