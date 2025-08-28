@@ -1,0 +1,118 @@
+services:
+  minio:
+    image: bitnami/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=admin123
+      - MINIO_ACCESS_KEY=myaccesskey
+      - MINIO_SECRET_KEY=mysecretkey
+      - MINIO_DEFAULT_BUCKETS=files
+    volumes:
+      - minio_data:/bitnami/minio/data
+    command: ["minio", "server", "--console-address", ":9001", "/bitnami/minio/data"]
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17
+    env_file:
+      - .env
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3.13.7-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    healthcheck:
+      test: [ "CMD", "rabbitmqctl", "status" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sh -c "mkdir -p /app/logs && chmod 777 /app/logs && alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - POSTGRES_HOST=postgres
+#    logging:
+#      driver: "json-file"  # Стандартный драйвер
+#      options:
+#        max-size: "10m"
+#        max-file: "3"
+
+#  prometheus:
+#    image: prom/prometheus:latest
+#    container_name: prometheus
+#    volumes:
+#      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+#    command:
+#      - '--config.file=/etc/prometheus/prometheus.yml'
+#    ports:
+#      - "9090:9090"
+#
+#  loki:
+#    image: grafana/loki:2.9.4
+#    container_name: loki
+#    command: -config.file=/etc/loki/local-config.yaml
+#    ports:
+#      - "3100:3100"
+#
+#  promtail:
+#      image: grafana/promtail:2.9.4
+#      container_name: promtail
+#      volumes:
+#        - ./logs:/app/logs:ro
+#        - ./promtail/promtail-config.yml:/etc/promtail/config.yml
+#      command: -config.file=/etc/promtail/config.yml
+#      depends_on:
+#        - loki
+#      restart: unless-stopped
+#
+#  grafana:
+#    image: grafana/grafana:latest
+#    container_name: grafana
+#    depends_on:
+#      - prometheus
+#      - loki
+#    ports:
+#      - "3000:3000"
+#    volumes:
+#      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+#    environment:
+#      - GF_SECURITY_ADMIN_USER=user
+#      - GF_SECURITY_ADMIN_PASSWORD=password
+
+volumes:
+  postgres:
+  rabbitmq_data:
+  minio_data:
